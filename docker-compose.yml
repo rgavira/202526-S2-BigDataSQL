@@ -1,208 +1,52 @@
+version: '3.8'
+
 networks:
   trino_network:
     driver: bridge
 
 volumes:
-  mysql-db:
-  warehouse:
-  hadoop_namenode:
-  hadoop_datanode1:
-  hadoop_datanode2:
+  mysql-data:
+  pg-data:
 
 services:
   # =======================================================
-  # HDFS + YARN
-  # =======================================================
-  namenode:
-    build: .
-    container_name: namenode
-    hostname: namenode
-    user: root
-    environment:
-      - HADOOP_HOME=/opt/hadoop
-      - HADOOP_CONF_DIR=/opt/hadoop/etc/hadoop
-    volumes:
-      - hadoop_namenode:/opt/hadoop/data/nameNode
-      - ./hadoop_config:/opt/hadoop/etc/hadoop
-      - ./tez/tez-site.xml:/opt/hadoop/etc/hadoop/tez-site.xml:ro   # TEZ
-      - ./scripts/start-hdfs.sh:/start-hdfs.sh
-    ports:
-      - "9870:9870"   # Web UI NameNode
-      - "9000:9000"   # fs.defaultFS: hdfs://namenode:9000
-    command: ["/bin/bash", "/start-hdfs.sh"]
-    networks:
-      - trino_network
-
-  datanode1:
-    build: .
-    container_name: datanode1
-    hostname: datanode1
-    user: root
-    environment:
-      - HADOOP_HOME=/opt/hadoop
-      - HADOOP_CONF_DIR=/opt/hadoop/etc/hadoop
-    volumes:
-      - hadoop_datanode1:/opt/hadoop/data/dataNode
-      - ./hadoop_config:/opt/hadoop/etc/hadoop
-      - ./tez/tez-site.xml:/opt/hadoop/etc/hadoop/tez-site.xml:ro   # TEZ
-      - ./scripts/init-datanode.sh:/init-datanode.sh
-    depends_on:
-      - namenode
-    command: ["/bin/bash", "/init-datanode.sh"]
-    networks:
-      - trino_network
-
-  datanode2:
-    build: .
-    container_name: datanode2
-    hostname: datanode2
-    user: root
-    environment:
-      - HADOOP_HOME=/opt/hadoop
-      - HADOOP_CONF_DIR=/opt/hadoop/etc/hadoop
-    volumes:
-      - hadoop_datanode2:/opt/hadoop/data/dataNode
-      - ./hadoop_config:/opt/hadoop/etc/hadoop
-      - ./tez/tez-site.xml:/opt/hadoop/etc/hadoop/tez-site.xml:ro   # TEZ
-      - ./scripts/init-datanode.sh:/init-datanode.sh
-    depends_on:
-      - namenode
-    command: ["/bin/bash", "/init-datanode.sh"]
-    networks:
-      - trino_network
-
-  resourcemanager:
-    build: .
-    container_name: resourcemanager
-    hostname: resourcemanager
-    user: root
-    environment:
-      - HADOOP_HOME=/opt/hadoop
-      - HADOOP_CONF_DIR=/opt/hadoop/etc/hadoop
-    volumes:
-      - ./hadoop_config:/opt/hadoop/etc/hadoop
-      - ./tez/tez-site.xml:/opt/hadoop/etc/hadoop/tez-site.xml:ro   # TEZ
-      - ./scripts/start-yarn.sh:/start-yarn.sh
-    ports:
-      - "8088:8088"
-      - "8030:8030"
-      - "8031:8031"
-      - "8032:8032"
-      - "8033:8033"
-    depends_on:
-      - namenode
-    command: ["/bin/bash", "/start-yarn.sh"]
-    networks:
-      - trino_network
-
-  nodemanager:
-    build: .
-    container_name: nodemanager
-    hostname: nodemanager
-    user: root
-    environment:
-      - HADOOP_HOME=/opt/hadoop
-      - HADOOP_CONF_DIR=/opt/hadoop/etc/hadoop
-    volumes:
-      - ./hadoop_config:/opt/hadoop/etc/hadoop
-      - ./tez/tez-site.xml:/opt/hadoop/etc/hadoop/tez-site.xml:ro   # TEZ
-      - ./scripts/start-nodemanager.sh:/start-nodemanager.sh
-    depends_on:
-      - resourcemanager
-    command: ["/bin/bash", "/start-nodemanager.sh"]
-    ports:
-      - "8042:8042"
-    networks:
-      - trino_network
-
-  # =======================================================
-  # MySQL Metastore
+  # MySQL (ventas_db)
   # =======================================================
   mysql:
     image: mysql:8.0
-    restart: unless-stopped
     container_name: mysql
     hostname: mysql
+    restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: rootpassword
-      MYSQL_DATABASE: metastore_db
-      MYSQL_USER: hive
-      MYSQL_PASSWORD: password
+      MYSQL_USER: demo
+      MYSQL_PASSWORD: demo123
     ports:
-      - '3306:3306'
+      - "3306:3306"
     volumes:
-      - mysql-db:/var/lib/mysql
+      - mysql-data:/var/lib/mysql
+      # scripts de inicialización
       - ./mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - trino_network
 
   # =======================================================
-  # Hive Metastore
+  # PostgreSQL (productos_db)
   # =======================================================
-  metastore:
-    image: apache/hive:4.0.1
-    depends_on:
-      - mysql
-      - namenode
+  postgres:
+    image: postgres:15
+    container_name: postgres
+    hostname: postgres
     restart: unless-stopped
-    container_name: metastore
-    hostname: metastore
     environment:
-      DB_DRIVER: mysql
-      SERVICE_NAME: 'metastore'
-      HADOOP_HOME: /opt/hadoop
-      HADOOP_CONF_DIR: /opt/hadoop/etc/hadoop
-      TEZ_CONF_DIR: /opt/hadoop/etc/hadoop                  # TEZ
-      SERVICE_OPTS: >
-        -Xmx1G
-        -Djavax.jdo.option.ConnectionDriverName=com.mysql.cj.jdbc.Driver
-        -Djavax.jdo.option.ConnectionURL=jdbc:mysql://mysql:3306/metastore_db?useSSL=false
-        -Djavax.jdo.option.ConnectionUserName=hive
-        -Djavax.jdo.option.ConnectionPassword=password
+      POSTGRES_USER: demo
+      POSTGRES_PASSWORD: demo123
     ports:
-      - '9083:9083'
+      - "5432:5432"
     volumes:
-      - warehouse:/opt/hive/data/warehouse
-      - ./hive/conf/hive-site.xml:/opt/hive/conf/hive-site.xml
-      - ./tez/tez-site.xml:/opt/hive/conf/tez-site.xml:ro    # TEZ
-      - ./hive/conf/mysql-connector-j-8.0.33.jar:/opt/hive/lib/mysql.jar
-      - ./hadoop_config:/opt/hadoop/etc/hadoop    # core-site.xml, hdfs-site.xml, etc.
-      - ./tez/tez-site.xml:/opt/hadoop/etc/hadoop/tez-site.xml:ro   # TEZ
-    networks:
-      - trino_network
-
-  # =======================================================
-  # HiveServer2
-  # =======================================================
-  hiveserver2:
-    image: apache/hive:4.0.1
-    restart: unless-stopped
-    depends_on:
-      - metastore
-      - namenode
-    container_name: hiveserver2
-    hostname: hiveserver2
-    environment:
-      DB_DRIVER: mysql
-      HIVE_SERVER2_THRIFT_PORT: 10000
-      SERVICE_NAME: 'hiveserver2'
-      HADOOP_HOME: /opt/hadoop
-      HADOOP_CONF_DIR: /opt/hadoop/etc/hadoop
-      TEZ_CONF_DIR: /opt/hadoop/etc/hadoop                  # TEZ
-      SERVICE_OPTS: >
-        -Xmx1G
-        -Dhive.metastore.uris=thrift://metastore:9083
-    ports:
-      - '10000:10000'
-      - '10002:10002'
-    volumes:
-      - warehouse:/opt/hive/data/warehouse
-      - ./hive/conf/hive-site.xml:/opt/hive/conf/hive-site.xml
-      - ./tez/tez-site.xml:/opt/hive/conf/tez-site.xml:ro    # TEZ
-      - ./hive/conf/mysql-connector-j-8.0.33.jar:/opt/hive/lib/mysql.jar
-      - ./hadoop_config:/opt/hadoop/etc/hadoop
-      - ./tez/tez-site.xml:/opt/hadoop/etc/hadoop/tez-site.xml:ro   # TEZ
-    # usamos el entrypoint por defecto de la imagen (no hace falta command)
+      - pg-data:/var/lib/postgresql/data
+      # scripts de inicialización
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - trino_network
 
@@ -211,21 +55,19 @@ services:
   # =======================================================
   trino:
     image: trinodb/trino:472
-    restart: unless-stopped
     container_name: trino
     hostname: trino
+    restart: unless-stopped
     user: root
     environment:
       - TRINO_CONFIG_DIR=/etc/trino
     volumes:
       - ./trino/conf:/etc/trino
       - ./trino/conf/catalog:/etc/trino/catalog
-      - ./hive/conf/hive-site.xml:/etc/trino/hive-site.xml
-      - ./hadoop_config:/etc/hadoop   # core-site.xml, hdfs-site.xml, etc.
     depends_on:
-      - hiveserver2
-      - namenode
+      - mysql
+      - postgres
     ports:
-      - '8080:8080'
+      - "8080:8080"
     networks:
       - trino_network
