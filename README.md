@@ -13,14 +13,12 @@ Este repositorio contiene el entorno de desarrollo para la **Sesión 2: Motores 
 ## 📂 Estructura del Repositorio
 
 ```
-📂 S2-Hive-Trino/
+📂 S2-BigDataSQL/
 ├── 📄 docker-compose.yml
 ├── 📄 dockerfile
-├── 📂 hadoop_config/
-├── 📂 hive/
+├── 📂 mysql/
+├── 📂 postgres/
 ├── 📂 trino-config/
-├── 📂 scripts/
-└── 📂 src/MapReduce/
 ```
 
 ## 🛠️ Requisitos
@@ -33,11 +31,11 @@ Este repositorio contiene el entorno de desarrollo para la **Sesión 2: Motores 
 
 1️⃣ Clona este repositorio:  
 ```sh
-git clone https://github.com/<tu-org>/S2-Hive-Trino.git
-cd S2-Hive-Trino
+git clone https://github.com/<tu-org>/S2-BigDataSQL.git
+cd S2-BigDataSQL
 ```
 
-2️⃣ Inicia el entorno Hive/Trino:  
+2️⃣ Inicia el entorno Trino:  
 ```sh
 docker-compose up -d
 ```
@@ -47,35 +45,30 @@ docker-compose up -d
 docker ps
 ```
 
-4️⃣ Accede al contenedor de Hive:  
+4️⃣ Accede al contenedor de Trino:  
 ```sh
-docker exec -it hive-server bash
+docker exec -it trino bash
 ```
 
 5️⃣ Accede al CLI de Trino:  
 ```sh
-docker exec -it trino bash
-trino
+docker exec -it trino trino
+
 ```
 
 ## 📌 Comandos Útiles
 
-### 🔹 Hive
-```sh
-beeline -u jdbc:hive2://localhost:10000
-SHOW DATABASES;
-```
 
 ### 🔹 Trino
 ```sql
 SHOW CATALOGS;
-SHOW SCHEMAS FROM hive;
-SELECT * FROM hive.default.tabla LIMIT 10;
+SHOW SCHEMAS FROM mysql;
+
 ```
 
 ## 📝 Notas
 
-- Hive y Trino pueden tardar unos segundos en inicializarse.  
+- Trino puede tardar unos segundos en inicializarse.  
 - Si modificas los catálogos o configuraciones, reinicia los servicios:  
 ```sh
 docker-compose down
@@ -84,27 +77,12 @@ docker-compose up -d
 
 ## 🐞 FAQ
 
-**Hive no conecta con HDFS**  
-Verifica que el Namenode está funcionando:  
-```sh
-docker ps | grep namenode
-```
 
-**El namenode me da un error de unexpected end of file**
-Verifica caracteres ocultos en el fichero. Ejecuta:
-```sh
-cat -A start-hdfs.sh
-```
-Si ves ^M al final de las líneas, el archivo tiene formato Windows y debes convertirlo.
-```sh
-sed -i 's/\r$//' start-hdfs.sh
-```
 
-**Trino no muestra el catálogo Hive**  
-Revisa la configuración del conector en `trino-config/catalog/hive.properties`.
+**Trino no muestra el catálogo**  
+Revisa la configuración del conector en `trino-config/catalog/mysql.properties`.
 
 ## 📖 Referencias
 
-- [Documentación oficial de Hive](https://cwiki.apache.org/confluence/display/Hive/Home)  
 - [Documentación oficial de Trino](https://trino.io/docs/current/)  
 - [Docker Hub – Hive/Trino Images](https://hub.docker.com/)
