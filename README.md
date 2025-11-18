@@ -4,7 +4,6 @@ Este repositorio contiene el entorno de desarrollo para la **Sesión 2: Motores 
 
 ## 🚀 Características
 
-- 🔍 **Hive**: Ejecución de consultas SQL sobre datos almacenados en HDFS.  
 - ⚡ **Trino**: Motor de consultas distribuido ultrarrápido para análisis interactivo.  
 - 📁 Integración completa con **HDFS** y configuración sobre Docker.  
 - 🗄️ Ejemplos prácticos y scripts para cargar datos y ejecutar queries.  
@@ -85,4 +84,4 @@ Revisa la configuración del conector en `trino-config/catalog/mysql.properties`
 ## 📖 Referencias
 
 - [Documentación oficial de Trino](https://trino.io/docs/current/)  
-- [Docker Hub – Hive/Trino Images](https://hub.docker.com/)
+- [Docker Hub – Trino Images](https://hub.docker.com/)
