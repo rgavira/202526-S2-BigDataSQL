@@ -1,73 +1,117 @@
-version: '3.8'
-
-networks:
-  trino_network:
-    driver: bridge
-
-volumes:
-  mysql-data:
-  pg-data:
+version: "3.8"
 
 services:
-  # =======================================================
-  # MySQL (ventas_db)
-  # =======================================================
-  mysql:
-    image: mysql:8.0
-    container_name: mysql
-    hostname: mysql
-    restart: unless-stopped
-    environment:
-      MYSQL_ROOT_PASSWORD: rootpassword
-      MYSQL_USER: demo
-      MYSQL_PASSWORD: demo123
-    ports:
-      - "3306:3306"
-    volumes:
-      - mysql-data:/var/lib/mysql
-      # scripts de inicialización
-      - ./mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
-    networks:
-      - trino_network
 
-  # =======================================================
-  # PostgreSQL (productos_db)
-  # =======================================================
+  # ─── PostgreSQL  (london_db: hogares | metastore_db: Hive) ────────────────
   postgres:
     image: postgres:15
     container_name: postgres
-    hostname: postgres
-    restart: unless-stopped
     environment:
       POSTGRES_USER: demo
       POSTGRES_PASSWORD: demo123
-    ports:
-      - "5432:5432"
+      POSTGRES_DB: demo
     volumes:
       - pg-data:/var/lib/postgresql/data
-      # scripts de inicialización
       - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
-    networks:
-      - trino_network
+      - ./data:/docker-entrypoint-initdb.d/data:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U demo"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
-  # =======================================================
-  # Trino
-  # =======================================================
+  # ─── MinIO  (Data Lake S3-compatible) ──────────────────────────────────────
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio-data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ─── MinIO Setup  (one-shot): crea bucket y sube el Parquet ────────────────
+  minio-setup:
+    image: minio/mc:latest
+    container_name: minio-setup
+    depends_on:
+      minio:
+        condition: service_healthy
+    volumes:
+      - ./data:/data:ro
+    entrypoint: >
+      /bin/sh -c "
+        mc alias set local http://minio:9000 minioadmin minioadmin &&
+        mc mb --ignore-existing local/london &&
+        mc cp /data/daily_dataset_reduced.parquet local/london/daily_dataset/daily_dataset_reduced.parquet &&
+        echo 'Parquet subido a MinIO'
+      "
+    restart: "no"
+
+  # ─── Hive Metastore  (catálogo para Parquet en MinIO) ──────────────────────
+  # Workaround: la imagen bitsondatadev tiene hardcodeado nc -z host 3306
+  # Sobreescribimos el entrypoint para esperar en el puerto 5432 correcto
+  hive-metastore:
+    image: bitsondatadev/hive-metastore:latest
+    container_name: hive-metastore
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      METASTORE_DB_HOSTNAME: postgres
+      METASTORE_DB_NAME: metastore_db
+      METASTORE_DB_USER: demo
+      METASTORE_DB_PASSWORD: demo123
+    volumes:
+      - ./trino/conf/hive-site.xml:/opt/apache-hive-metastore-3.0.0-bin/conf/hive-site.xml
+    entrypoint: >
+      /bin/sh -c "
+        echo 'Downloading extra JARs...' &&
+        wget -q -O /opt/apache-hive-metastore-3.0.0-bin/lib/postgresql-42.6.0.jar https://jdbc.postgresql.org/download/postgresql-42.6.0.jar &&
+        wget -q -O /opt/apache-hive-metastore-3.0.0-bin/lib/hadoop-aws-3.2.0.jar https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.2.0/hadoop-aws-3.2.0.jar &&
+        wget -q -O /opt/apache-hive-metastore-3.0.0-bin/lib/aws-java-sdk-bundle-1.11.375.jar https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.11.375/aws-java-sdk-bundle-1.11.375.jar &&
+        echo 'Waiting for postgres:5432...' &&
+        while ! nc -z postgres 5432; do sleep 1; done &&
+        (/opt/apache-hive-metastore-3.0.0-bin/bin/schematool -dbType postgres -info || /opt/apache-hive-metastore-3.0.0-bin/bin/schematool -dbType postgres -initSchema) &&
+        exec /opt/apache-hive-metastore-3.0.0-bin/bin/start-metastore
+      "
+    ports:
+      - "9083:9083"
+
+  # ─── Trino ─────────────────────────────────────────────────────────────────
   trino:
     image: trinodb/trino:472
     container_name: trino
-    hostname: trino
-    restart: unless-stopped
     user: root
-    environment:
-      - TRINO_CONFIG_DIR=/etc/trino
+    depends_on:
+      - hive-metastore
+      - postgres
     volumes:
       - ./trino/conf:/etc/trino
-      - ./trino/conf/catalog:/etc/trino/catalog
-    depends_on:
-      - mysql
-      - postgres
     ports:
       - "8080:8080"
-    networks:
-      - trino_network
+
+  # ─── CloudBeaver  (UI web para SQL y S3) ───────────────────────────────────
+  cloudbeaver:
+    image: dbeaver/cloudbeaver:latest
+    container_name: cloudbeaver
+    volumes:
+      - cloudbeaver:/opt/cloudbeaver/workspace
+    ports:
+      - "8978:8978"
+
+volumes:
+  pg-data:
+  minio-data:
+  cloudbeaver:
