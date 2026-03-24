@@ -1,8 +1,26 @@
+# Entregable 1. Motores SQL para Big Data
 
+**Alumno:** Ramón Gavira Sánchez
 
-## INTRODUCCIÓN
+**Asignatura:** Ingeniería de Datos: Big Data
 
-### Objetivo
+**Titulación:** M.U. en Ingeniería del Software: Cloud, Datos y Gestión TI
+
+---
+
+## Índice
+
+1. [Introducción](#1-introducción)
+2. [Arquitectura](#2-arquitectura)
+3. [Despliegue del entorno](#3-despliegue-del-entorno)
+4. [Configuración de Trino](#4-configuración-de-trino)
+5. [Carga de datos en PostgreSQL](#5-carga-de-datos-en-postgresql)
+6. [Almacenamiento en MinIO y registro en Hive](#6-almacenamiento-en-minio-y-registro-en-hive)
+7. [Consultas de análisis](#7-consultas-de-análisis)
+
+---
+
+## 1. Introducción
 
 Esta práctica tiene como objetivo desplegar un entorno de consultas federadas con Trino, conectándose con dos fuentes de datos: una base de datos relacional PostgreSQL y un Data Lake basado en MinIO con ficheros en formato Parquet.
 
@@ -17,11 +35,9 @@ La información está dividida en dos conjuntos de datos, y ahí reside la clave
 
 ---
 
-## ARQUITECTURA
+## 2. Arquitectura
 
-### Diagrama general
-
-El sistema está orquestado por **Docker Compose**, que permite desplegar todos los contenedores necesarios para el funcionamiento del ecosistema, el siguiente diagrama muestra la arquitectura del sistema:
+El sistema está orquestado por **Docker Compose**, que permite desplegar todos los contenedores necesarios para el funcionamiento del ecosistema. El siguiente diagrama muestra la arquitectura del sistema:
 
 ![Diagrama de arquitectura del ecosistema](images/DIAGRAMA.png)
 
@@ -51,9 +67,7 @@ Se reutiliza el mismo servidor PostgreSQL para evitar levantar un contenedor de 
 
 ---
 
-## DESPLIEGUE DEL ENTORNO
-
-### Arranque con Docker Compose
+## 3. Despliegue del entorno
 
 Para desplegar todo el ecosistema con un solo comando:
 
@@ -84,7 +98,7 @@ docker compose down -v
 
 ---
 
-## CONFIGURACIÓN DE TRINO PARA CONSULTAR AMBAS FUENTES
+## 4. Configuración de Trino
 
 Trino se configura mediante ficheros de propiedades que se montan como volumen desde `./trino/conf:/etc/trino`. En la subcarpeta `catalog/` se definen los **conectores**: cada fichero `.properties` representa una conexión a una fuente de datos.
 
@@ -179,7 +193,7 @@ El Hive Metastore necesita su propia configuración, que se monta como volumen d
 </property>
 ```
 
-### Problemas con la imagen de Hive Metastore y soluciones aplicadas
+### Problemas con la imagen de Hive Metastore
 
 La imagen `bitsondatadev/hive-metastore:latest` está diseñada originalmente para funcionar con **MySQL**. Para adaptarla a nuestro entorno con PostgreSQL, fue necesario resolver dos problemas en el `entrypoint` del contenedor:
 
@@ -205,7 +219,7 @@ wget -q -O .../lib/aws-java-sdk-bundle-1.11.375.jar \
 
 ---
 
-## CARGA DE `informations_households.csv` EN POSTGRESQL
+## 5. Carga de datos en PostgreSQL
 
 La carga de datos del CSV en PostgreSQL se realiza de forma **automática** durante el primer arranque del contenedor, gracias al script `postgres/init.sql` que se monta en el directorio de inicialización de la imagen oficial de PostgreSQL.
 
@@ -254,7 +268,6 @@ CREATE TABLE informations_households (
 3. La imagen oficial de PostgreSQL ejecuta automáticamente cualquier fichero `.sql` de ese directorio **solo la primera vez** que se inicializa el volumen `pg-data`.
 4. El script crea las dos bases de datos (`metastore_db` y `london_db`), la tabla `informations_households` y carga el CSV con `\copy`.
 
-
 ### Verificación
 
 Una vez levantado el ecosistema, se puede verificar la carga conectándose a Trino:
@@ -275,7 +288,7 @@ SELECT * FROM postgres.public.informations_households LIMIT 2;
 
 ---
 
-## ALMACENAMIENTO DE `daily_dataset_reduced.parquet` EN MINIO Y REGISTRO EN HIVE
+## 6. Almacenamiento en MinIO y registro en Hive
 
 ### Paso 1. Carga automática del fichero Parquet en MinIO
 
@@ -359,12 +372,10 @@ WITH (
 Verificamos que la tabla se ha registrado correctamente y que los datos son accesibles:
 
 ```sql
--- Contar registros totales
 SELECT COUNT(*) AS total_registros FROM hive.london.daily_dataset;
 ```
 
 ```sql
--- Ver las primeras filas
 SELECT * FROM hive.london.daily_dataset LIMIT 2;
 ```
 
@@ -394,7 +405,7 @@ Esta consulta realiza un **JOIN federado**: Trino obtiene los datos de `informat
 
 ---
 
-## CONSULTAS DE ANÁLISIS
+## 7. Consultas de análisis
 
 La siguiente sección muestra la potencia del ecosistema desplegado, realizando consultas que combinan ambas fuentes de datos para extraer conclusiones sobre el comportamiento energético de los hogares londinenses. Todas las consultas que incluyen un JOIN entre `postgres.public.informations_households` y `hive.london.daily_dataset` son **consultas federadas**: Trino obtiene los datos de cada fuente por separado y los combina en memoria de forma transparente para el usuario.
 
