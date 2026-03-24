@@ -1,9 +1,3 @@
--- ============================================================
--- CONSULTAS FEDERADAS — Smart Meters in London
--- Trino 472 | Fuentes: PostgreSQL (london_db) + MinIO (Parquet)
--- ============================================================
-
-
 -- ── CONSULTA 1 ───────────────────────────────────────────────
 -- Distribución de hogares por grupo socioeconómico y tarifa
 -- Fuente: PostgreSQL únicamente (sin JOIN)

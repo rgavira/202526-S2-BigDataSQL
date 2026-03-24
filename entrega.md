@@ -17,6 +17,7 @@
 5. [Carga de datos en PostgreSQL](#5-carga-de-datos-en-postgresql)
 6. [Almacenamiento en MinIO y registro en Hive](#6-almacenamiento-en-minio-y-registro-en-hive)
 7. [Consultas de análisis](#7-consultas-de-análisis)
+8. [Conclusiones](#8-conclusiones)
 
 ---
 
@@ -409,6 +410,9 @@ Esta consulta realiza un **JOIN federado**: Trino obtiene los datos de `informat
 
 La siguiente sección muestra la potencia del ecosistema desplegado, realizando consultas que combinan ambas fuentes de datos para extraer conclusiones sobre el comportamiento energético de los hogares londinenses. Todas las consultas que incluyen un JOIN entre `postgres.public.informations_households` y `hive.london.daily_dataset` son **consultas federadas**: Trino obtiene los datos de cada fuente por separado y los combina en memoria de forma transparente para el usuario.
 
+> **Nota sobre la presentación de resultados**
+> Para garantizar la máxima legibilidad de la memoria, las salidas de las sentencias SQL se han transcrito empleando tablas. Si bien todas y cada una de las consultas han sido ejecutadas y validadas directamente a través de la interfaz de Trino, se ha prescindido de utilizar capturas de pantalla de la terminal para tener una presentación más limpia y estructurada. Todos los datos reflejados son estrictamente fieles a la salida del entorno real.
+
 ### Conceptos clave
 
 Antes de comenzar con las consultas, es importante entender dos conceptos que aparecen de forma recurrente en los datos:
@@ -496,12 +500,19 @@ JOIN hive.london.daily_dataset d ON h.lclid = d.lclid
 GROUP BY h.stdortou;
 ```
 
-**Resultado:**
+**Resultado (Parte 1):**
 
-| stdortou | num_hogares | kwh_medio_dia | consumo_pico | consumo_valle | variabilidad |
-|---|---|---|---|---|---|
-| Std | 1234 | 0.2063 | 0.8228 | 0.0563 | 0.7666 |
-| ToU | 328 | 0.1955 | 0.7833 | 0.0541 | 0.7292 |
+| stdortou | num_hogares | kwh_medio_dia |
+|---|---|---|
+| Std | 1234 | 0.2063 |
+| ToU | 328 | 0.1955 |
+
+**Resultado (Parte 2):**
+
+| stdortou | consumo_pico | consumo_valle | variabilidad |
+|---|---|---|---|
+| Std | 0.8228 | 0.0563 | 0.7666 |
+| ToU | 0.7833 | 0.0541 | 0.7292 |
 
 **Análisis:** Los hogares con tarifa ToU consumen un **5,2% menos** y presentan menor variabilidad entre pico y valle. La tarifa parece cumplir parcialmente su objetivo: los hogares tienden a suavizar su consumo, reduciendo los picos. La diferencia es moderada, lo que podría indicar que el incentivo funciona pero de forma limitada.
 
@@ -627,3 +638,13 @@ ORDER BY h.acorn_grouped, h.stdortou;
 | Comfortable | ToU | 113 | 0.2027 | 0.7367 |
 
 **Análisis:** El efecto de la tarifa ToU es consistente en *Adversity* y *Affluent*, donde los hogares ToU consumen menos y con menor variabilidad. Sin embargo, en *Comfortable* el comportamiento se invierte: los hogares ToU consumen marginalmente más (0,2027 vs 0,2001 kWh/día). El hallazgo más claro es que **la tarifa ToU reduce la variabilidad en todos los grupos**, confirmando que consigue suavizar los picos de consumo aunque su efecto sobre el consumo total no sea uniforme.
+
+---
+
+## 8. Conclusiones
+
+La realización de esta práctica me ha permitido comprender de forma aplicada el funcionamiento de un motor de consultas federadas como **Trino** y su capacidad para abstraer la complejidad de trabajar con múltiples fuentes de datos. En un escenario real, los datos raramente residen en un único sistema, y Trino resuelve precisamente ese problema: permite lanzar consultas SQL estándar sobre fuentes completamente distintas (una base de datos relacional y un Data Lake) como si fueran una sola.
+
+Uno de los aprendizajes más relevantes ha sido entender el papel de **Hive Metastore** como intermediario entre Trino y el almacenamiento de objetos. MinIO almacena ficheros Parquet, pero por sí solo no tiene noción de tablas, columnas ni tipos de datos. Hive Metastore actúa como catálogo de metadatos: registra la estructura de las tablas y su ubicación en el bucket, permitiendo que Trino las consulte como si fueran tablas convencionales.
+
+También reforzar mi conocimiento sobre el funcionamiento de **Docker Compose** y la posibilidad de desplegar diferentes entornos de bases de datos, lo cual rara vez hemos realizado en el grado. Por último, he entendido el funcionamiento de MinIO, similar a un bucket de AWS S3, tecnología que hemos utilizado en asignaturas como *Despliegue y Operación de Servicios*
